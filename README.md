@@ -18,48 +18,6 @@ It's a web app you install on your phone's home screen. No account, no server, n
 - **Backups**: export to a JSON file and import it back.
 - **Works offline** after the first load.
 
-## Install on iPhone
-
-1. Open the app's link in **Safari**.
-2. Tap **Share**, then **Add to Home Screen**.
-3. Always open it from the home screen icon. Safari tabs and the home screen app keep separate data.
-
-On Android, open the link in Chrome and choose **Install app** from the menu.
-
-## Deploy with GitHub Pages
-
-1. Create a **public** repository and upload every file in this project, keeping the folder structure.
-2. Go to **Settings → Pages**, set Source to **Deploy from a branch**, choose `main` and `/ (root)`, and save.
-3. After a minute or two the app is live at `https://<username>.github.io/<repository>/`.
-
-Any static host works the same way (Netlify, Cloudflare Pages, Vercel). There is no build step.
-
-## Run locally
-
-Service workers need a real server, so don't open `index.html` straight from disk.
-
-```bash
-python3 -m http.server 8000
-```
-
-Then open http://localhost:8000.
-
-## Project structure
-
-All files sit in the top level of the repository, so no folders are needed.
-
-```
-index.html              App shell and markup
-styles.css              All styles
-program.js              Training program data (edit this to change exercises)
-app.js                  App logic: storage, timers, views, events
-sw.js                   Service worker for offline use
-manifest.webmanifest    Install metadata for Android and desktop
-*.png                   Home screen and favicon images
-PROGRAM.md              The training program and the research behind it
-CHANGELOG.md            Release history
-LICENSE
-```
 
 ## Customizing the program
 
