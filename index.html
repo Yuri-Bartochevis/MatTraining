@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Strength training log for BJJ athletes: 4-day program, rest timer, progress tracking and weekly load.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Mat Strength">
+<meta name="theme-color" content="#ECEEEA">
+<title>Mat Strength</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="top"><h1 id="title">Mat Strength</h1><span class="date" id="today"></span></header>
+<main id="view" aria-live="polite"><p class="empty">Loading your training log…</p></main>
+
+<div id="restbar" hidden>
+  <div class="rest-in" id="restIn">
+    <div class="rt" id="restT">0:00</div>
+    <div class="rl" id="restL">Rest</div>
+    <button data-a="rest-add">+15 s</button>
+    <button data-a="rest-stop">Skip</button>
+    <div class="rest-prog" id="restP"></div>
+  </div>
+</div>
+
+<nav class="tabs" aria-label="Sections"><div class="tabs-in">
+  <button class="tab" data-tab="train"><svg viewBox="0 0 24 24"><path d="M3 10v4M6 7v10M18 7v10M21 10v4M6 12h12"/></svg>Train</button>
+  <button class="tab" data-tab="timer"><svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6"/></svg>Timer</button>
+  <button class="tab" data-tab="log"><svg viewBox="0 0 24 24"><path d="M5 4h14v16H5zM9 9h6M9 13h6M9 17h3"/></svg>Log</button>
+  <button class="tab" data-tab="progress"><svg viewBox="0 0 24 24"><path d="M3 20h18M5 16l4-5 4 3 6-8"/></svg>Progress</button>
+  <button class="tab" data-tab="body"><svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="2.5"/><path d="M5 21l2-9h10l2 9M12 12v-4"/></svg>Body</button>
+</div></nav>
+<div id="toast" role="status"></div>
+
+<noscript><p style="padding:16px">Mat Strength needs JavaScript turned on.</p></noscript>
+<script src="program.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
