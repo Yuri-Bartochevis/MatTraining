@@ -5,7 +5,7 @@
  * right away, with the cached copy as a fallback when offline.
  * Bump CACHE whenever you release a new version.
  */
-const CACHE = 'mat-strength-1.3.0';
+const CACHE = 'mat-strength-1.4.0';
 const APP_FILES = [
   './',
   './index.html',
