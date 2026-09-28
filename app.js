@@ -1,5 +1,5 @@
-/* Mat Strength: app logic. Depends on js/program.js. */
-const APP_VERSION = '1.3.0';
+/* Mat Strength: app logic. Depends on program.js. */
+const APP_VERSION = '1.4.0';
 /* ---------- Storage ---------- */
 const KEY = 'mat-strength-v1';
 const fresh = () => ({sessions:[], bodyweight:[], activities:[], active:null, settings:{blockStart:null, sound:true}});
@@ -50,6 +50,11 @@ const weekStart = d => { const x = new Date(d.getFullYear(), d.getMonth(), d.get
 const daysBetween = (a, b) => Math.round((b - a) / 86400000);
 const fmtKg = x => (Math.round(x * 10) / 10).toString();
 const CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>';
+
+// Exercise lookup that never breaks: current program first, then retired exercises,
+// then a plain fallback so an unknown id in old history still shows instead of crashing.
+const RET = Object.fromEntries((typeof RETIRED !== 'undefined' ? RETIRED : []).map(e => [e.id, {rest:90, target:'', ...e, retired:true}]));
+const exInfo = id => EX[id] || RET[id] || {id, name:id, type:'wr', rest:90, target:'', retired:true};
 
 let undoFn = null;
 function toast(msg, undo){
@@ -126,7 +131,7 @@ function weekCounts(ref = new Date()){
   };
 }
 function setSummary(item){
-  const ex = EX[item.exId];
+  const ex = exInfo(item.exId);
   const done = item.sets.filter(s => s.done);
   if (!done.length) return '';
   return done.map(s => {
@@ -150,7 +155,7 @@ function latestBW(){ const b = [...data.bodyweight].sort((a,b) => a.date.localeC
 function startSession(dayId){
   const day = DAY[dayId]; const bi = blockInfo();
   data.active = {
-    id: uid(), dayId, date: todayISO(), startedAt: new Date().toISOString(), deload: bi.deload, notes:'',
+    id: uid(), dayId, date: todayISO(), startedAt: new Date().toISOString(), deload: bi.deload, notes:'', warmup:{},
     items: day.ex.map(e => {
       const last = lastFor(e.id);
       const n = bi.deload ? Math.max(1, Math.ceil(e.sets * 2/3)) : e.sets;
@@ -171,6 +176,7 @@ function finishSession(){
   a.endedAt = new Date().toISOString();
   a.durationSec = Math.round((new Date(a.endedAt) - new Date(a.startedAt)) / 1000);
   a.items = a.items.map(i => ({exId:i.exId, sets:i.sets.filter(s => s.done).map(({ph, ...s}) => s)})).filter(i => i.sets.length);
+  delete a.warmup; delete a.wuOpen; // Warm-up ticks are for this session only, never saved to history.
   data.sessions.push(a); data.active = null; stopRest(); hold = null;
   save(); keepAwake(false); toast('Workout saved'); tab = 'log'; render();
 }
@@ -181,7 +187,10 @@ function discardSession(){
 
 /* ---------- Timers ---------- */
 let rest = null; // {end, total, label}
-function startRest(sec, label){ rest = {end: Date.now() + sec*1000, total: sec, label: label || 'Rest', fired:false}; $('#restbar').hidden = false; tick(); }
+function startRest(sec, label){
+  if (!(sec > 0)) return; // Rest 0 means superset: go straight to the next exercise, no timer.
+  rest = {end: Date.now() + sec*1000, total: sec, label: label || 'Rest', fired:false}; $('#restbar').hidden = false; tick();
+}
 function stopRest(){ rest = null; $('#restbar').hidden = true; }
 let sw = {running:false, base:0, startedAt:0, laps:[]};
 const swTime = () => sw.base + (sw.running ? Date.now() - sw.startedAt : 0);
@@ -284,7 +293,7 @@ function viewTrain(){
 }
 
 function setRow(item, ii, s, si){
-  const ex = EX[item.exId]; const ph = s.ph || {};
+  const ex = exInfo(item.exId); const ph = s.ph || {};
   const f = (field, unit, placeholder, mode='decimal') =>
     `<div class="field"><input inputmode="${mode}" type="text" data-ii="${ii}" data-si="${si}" data-f="${field}" value="${s[field] ?? ''}" placeholder="${placeholder ?? ''}" aria-label="${unit}"><span class="u">${unit}</span></div>`;
   const chk = `<button class="check" data-a="check" data-ii="${ii}" data-si="${si}" aria-label="Mark set ${si+1} done" aria-pressed="${s.done}">${CHECK}</button>`;
@@ -297,6 +306,34 @@ function setRow(item, ii, s, si){
   return `<div class="set ${s.done ? 'done' : ''}"><span class="i">${si+1}</span>${f('w','kg', '')}${f('r','reps', ph.r, 'numeric')}${chk}</div>`;
 }
 
+/* Warm-up checklist shown at the top of a workout. Ticks live on data.active only. */
+function warmupGroups(day){
+  if (typeof WARMUP === 'undefined') return [];
+  const kind = day.warmup === 'lower' ? 'lower' : 'upper';
+  const lift = day.ex.find(e => e.type === 'wr');
+  return [
+    {title:'General', items: WARMUP.general || []},
+    {title: kind === 'lower' ? 'Lower body primer' : 'Upper body primer', items: (WARMUP.primer || {})[kind] || []},
+    {title: lift ? `Ramp-up sets for ${lift.name.toLowerCase()}` : 'Ramp-up sets', items: WARMUP.ramp || [], tip: WARMUP.rampTip},
+  ].filter(g => g.items.length);
+}
+function warmupHTML(a, day){
+  const groups = warmupGroups(day); if (!groups.length) return '';
+  const w = a.warmup || {};
+  const all = groups.flatMap(g => g.items);
+  const n = all.filter(i => w[i.id]).length;
+  const open = a.wuOpen ?? (n < all.length);
+  return `<section class="wu ${n === all.length ? 'complete' : ''}">
+    <button class="wu-head" data-a="wu-toggle" aria-expanded="${open}">
+      <h3>Warm-up</h3><span class="wu-count">${n === all.length ? 'Done' : `${n} of ${all.length}`}<span class="muted"> ${open ? '−' : '+'}</span></span>
+    </button>
+    ${open ? groups.map(g => `<p class="wu-group">${esc(g.title)}</p>
+      <div class="wu-list">${g.items.map(i => `<button class="wu-item ${w[i.id] ? 'done' : ''}" data-a="wu" data-id="${i.id}" aria-pressed="${!!w[i.id]}">
+        <span class="check" aria-hidden="true">${CHECK}</span><span class="nm">${esc(i.name)}</span><span class="dose">${esc(i.dose)}</span></button>`).join('')}</div>
+      ${g.tip ? `<p class="tip">${esc(g.tip)}</p>` : ''}`).join('') : ''}
+  </section>`;
+}
+
 function viewSession(){
   const a = data.active; const day = DAY[a.dayId];
   const done = a.items.reduce((n, i) => n + i.sets.filter(s => s.done).length, 0);
@@ -307,14 +344,16 @@ function viewSession(){
     <div class="clock" id="sessClock">0:00</div>
   </div>
   ${a.deload ? `<p class="banner">Deload week. Sets are cut to about 2/3 and weights start 20% lighter. Keep BJJ light too if you can.</p>` : ''}
+  ${warmupHTML(a, day)}
   ${a.items.map((item, ii) => {
-    const ex = EX[item.exId]; const prev = lastFor(item.exId);
+    const ex = exInfo(item.exId); const prev = lastFor(item.exId);
+    const restTxt = ex.rest > 0 ? `Rest ${fmtDur(ex.rest)}.` : 'No rest, go straight to the next exercise.';
     return `<section class="ex">
-      <div class="ex-top"><h3>${ex.name}</h3><span class="target">${ex.target}</span></div>
-      <p class="last">${prev ? 'Last time: ' + esc(setSummary(prev)) : 'First time logging this.'} Rest ${fmtDur(ex.rest)}.</p>
+      <div class="ex-top"><h3>${esc(ex.name)}</h3><span class="target">${esc(ex.target)}</span></div>
+      <p class="last">${prev ? 'Last time: ' + esc(setSummary(prev)) : 'First time logging this.'} ${restTxt}</p>
       ${ex.tip ? `<p class="tip">${ex.tip}</p>` : ''}
       <div class="sets">${item.sets.map((s, si) => setRow(item, ii, s, si)).join('')}</div>
-      <div class="ex-actions"><button class="linkbtn" data-a="addset" data-ii="${ii}">Add set</button>${item.sets.length > 1 ? `<button class="linkbtn" data-a="delset" data-ii="${ii}">Remove last set</button>` : ''}<button class="linkbtn" data-a="restnow" data-ii="${ii}">Start rest</button></div>
+      <div class="ex-actions"><button class="linkbtn" data-a="addset" data-ii="${ii}">Add set</button>${item.sets.length > 1 ? `<button class="linkbtn" data-a="delset" data-ii="${ii}">Remove last set</button>` : ''}${ex.rest > 0 ? `<button class="linkbtn" data-a="restnow" data-ii="${ii}">Start rest</button>` : ''}</div>
     </section>`;
   }).join('')}
   <h2>Notes</h2>
@@ -358,14 +397,13 @@ function viewLog(){
     const wk = iso(weekStart(parseISO(r.date)));
     if (wk !== lastWeek) { lastWeek = wk; const wc = weekCounts(parseISO(r.date)); html += `<p class="day-sep">Week of ${fmtDate(wk)}: ${wc.lift} lifts, ${wc.bjj} BJJ, ${wc.cf} CrossFit</p>`; }
     if (r.kind === 'a') {
-      const A = ACT[r.a.type];
       html += actRow(r.a);
     } else {
-      const s = r.s, d = DAY[s.dayId], sets = s.items.reduce((n, i) => n + i.sets.length, 0), open = openEntry === s.id;
+      const s = r.s, d = DAY[s.dayId] || {n:'?', title:'Workout'}, sets = s.items.reduce((n, i) => n + i.sets.length, 0), open = openEntry === s.id;
       html += `<div class="entry"><button class="entry-h" data-a="toggle" data-id="${s.id}" aria-expanded="${open}">
         <span><h3>Day ${d.n}, ${d.title.toLowerCase()}${s.deload ? ' (deload)' : ''}</h3><span class="meta">${fmtDate(s.date)}, ${fmtDur(s.durationSec || 0)}, ${sets} sets, ${Math.round(sessionVolume(s)).toLocaleString()} kg moved</span></span>
         <span class="muted">${open ? '−' : '+'}</span></button>
-        ${open ? `<div class="detail">${s.items.map(i => `<div class="dx"><b>${EX[i.exId].name}:</b> ${esc(setSummary(i))}</div>`).join('')}
+        ${open ? `<div class="detail">${s.items.map(i => `<div class="dx"><b>${esc(exInfo(i.exId).name)}:</b> ${esc(setSummary(i))}</div>`).join('')}
           ${s.notes ? `<p class="muted" style="margin-top:6px">${esc(s.notes)}</p>` : ''}
           <button class="linkbtn" data-a="delsess" data-id="${s.id}" style="margin-top:6px">Delete workout</button></div>` : ''}
       </div>`;
@@ -409,10 +447,10 @@ function viewProgress(){
         <div class="track"><div class="zone" style="left:${st.lo/max*100}%;width:${(st.hi-st.lo)/max*100}%"></div>${ratio ? `<div class="marker" style="left:${Math.min(100, ratio/max*100)}%"></div>` : ''}</div></div>`;
     });
   }
-  const logged = Object.values(EX).filter(e => exHistory(e.id).length);
+  const logged = [...Object.values(EX), ...Object.values(RET)].filter(e => exHistory(e.id).length);
   if (!logged.length) return std + `<h2>Exercise trends</h2><p class="empty">Finish a workout to start tracking your lifts.</p>`;
   if (!progEx || !logged.find(e => e.id === progEx)) progEx = logged[0].id;
-  const ex = EX[progEx]; const hist = exHistory(progEx);
+  const ex = exInfo(progEx); const hist = exHistory(progEx);
   let metric, unitLabel;
   if (ex.type === 'time') { metric = i => Math.max(0, ...i.sets.map(s => s.t || 0)); unitLabel = 'Longest hold, sec'; }
   else if (ex.type === 'dist') { metric = i => Math.max(0, ...i.sets.map(s => s.w || 0)); unitLabel = 'Heaviest carry, kg'; }
@@ -429,7 +467,7 @@ function viewProgress(){
     }).join('')}<line x1="0" x2="340" y1="110" y2="110" stroke="#CDD2CB"/></svg>`;
   return std + `
   <h2>Exercise trends</h2>
-  <select data-a="progex" aria-label="Exercise">${logged.map(e => `<option value="${e.id}" ${e.id === progEx ? 'selected' : ''}>${e.name}</option>`).join('')}</select>
+  <select data-a="progex" aria-label="Exercise">${logged.map(e => `<option value="${e.id}" ${e.id === progEx ? 'selected' : ''}>${esc(e.name)}${e.retired ? ' (no longer in program)' : ''}</option>`).join('')}</select>
   <div class="kv"><div><div class="v">${fmtKg(best)}</div><div class="l">${unitLabel}</div></div><div><div class="v">${heavy ? fmtKg(heavy) : '–'}</div><div class="l">Heaviest kg</div></div><div><div class="v">${hist.length}</div><div class="l">Sessions</div></div></div>
   ${lineChart(pts, {unit: unitLabel})}
   <h2>Weekly load</h2>
@@ -477,6 +515,13 @@ document.addEventListener('click', e => {
     case 'start': startSession(b.dataset.day); break;
     case 'finish': finishSession(); break;
     case 'discard': discardSession(); break;
+    case 'wu': {
+      if (!act) break;
+      act.warmup = act.warmup || {}; const id = b.dataset.id;
+      act.warmup[id] = !act.warmup[id];
+      save(); render(); break;
+    }
+    case 'wu-toggle': if (act) { act.wuOpen = b.getAttribute('aria-expanded') !== 'true'; save(); render(); } break;
     case 'act': {
       const d = actDate || todayISO(); const item = {id: uid(), type: b.dataset.type, date: d, at: new Date().toISOString()};
       data.activities.push(item); save(); render();
@@ -492,14 +537,15 @@ document.addEventListener('click', e => {
     }
     case 'undo': if (undoFn) { const f = undoFn; undoFn = null; f(); $('#toast').classList.remove('show'); } break;
     case 'check': {
-      const s = act.items[ii].sets[si]; const ex = EX[act.items[ii].exId];
+      const s = act.items[ii].sets[si]; const ex = exInfo(act.items[ii].exId);
       s.done = !s.done;
       if (s.done) {
         if (s.r == null && s.ph?.r != null) s.r = s.ph.r;
         if (s.d == null && ex.type === 'dist') s.d = s.ph?.d ?? 30;
         if (s.t == null && s.ph?.t != null) s.t = s.ph.t;
         act.items[ii].sets.forEach((o, k) => { if (k > si && !o.done && o.w == null && s.w != null) o.w = s.w; });
-        startRest(ex.rest, `Rest after ${ex.name.toLowerCase()}`);
+        if (ex.rest > 0) startRest(ex.rest, `Rest after ${ex.name.toLowerCase()}`);
+        else { const nx = act.items[ii + 1]; toast(nx ? `Superset: go to ${exInfo(nx.exId).name.toLowerCase()}` : 'Set done'); }
       }
       save(); render(); break;
     }
@@ -507,13 +553,13 @@ document.addEventListener('click', e => {
       if (hold && hold.ii === ii && hold.si === si) {
         const secs = Math.round((Date.now() - hold.start) / 1000); const s = act.items[ii].sets[si];
         s.t = secs; s.done = true; hold = null; beep(1, 660);
-        startRest(EX[act.items[ii].exId].rest, 'Rest'); save();
+        startRest(exInfo(act.items[ii].exId).rest, 'Rest'); save();
       } else { hold = {ii, si, start: Date.now()}; beep(1, 990); }
       render(); break;
     }
     case 'addset': { const sets = act.items[ii].sets; const l = sets[sets.length-1]; sets.push({w: l?.w ?? null, r:null, d:null, t:null, ph:{...(l?.ph||{}), r: l?.r ?? l?.ph?.r, d: l?.d ?? l?.ph?.d, t: l?.t ?? l?.ph?.t}, done:false}); save(); render(); break; }
     case 'delset': act.items[ii].sets.pop(); save(); render(); break;
-    case 'restnow': startRest(EX[act.items[ii].exId].rest, 'Rest'); break;
+    case 'restnow': startRest(exInfo(act.items[ii].exId).rest, 'Rest'); break;
     case 'rest-add': if (rest) { rest.end += 15000; rest.total += 15; rest.fired = false; tick(); } break;
     case 'rest-stop': stopRest(); break;
     case 'restpreset': startRest(+b.dataset.s, 'Rest'); break;
