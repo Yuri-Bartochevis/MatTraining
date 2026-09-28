@@ -166,6 +166,23 @@ select{width:100%;height:46px;border:1px solid var(--line);background:var(--card
 .date-pick{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:.92rem}
 .date-pick input{height:38px;border:1px solid var(--line);background:var(--card);border-radius:6px;padding:0 8px}
 
+/* Warm-up checklist (session view). Reuses the set check box so it feels native. */
+.wu{padding:16px 0 12px;border-bottom:1px solid var(--line)}
+.wu-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;width:100%;background:none;border:0;padding:0;text-align:left}
+.wu-count{font-family:var(--cond);font-size:1.1rem;font-weight:600;white-space:nowrap}
+.wu.complete .wu-count{color:var(--mat)}
+.wu-group{font-family:var(--cond);font-weight:600;font-size:1rem;color:var(--ink2);margin:14px 0 4px}
+.wu-list{display:grid}
+.wu-item{display:flex;align-items:center;gap:12px;width:100%;min-height:48px;background:none;border:0;border-bottom:1px solid var(--line);padding:6px 0;text-align:left}
+.wu-item:last-child{border-bottom:0}
+.wu-item .check{width:40px;height:38px;flex:0 0 auto}
+.wu-item .nm{flex:1;min-width:0}
+.wu-item .dose{font-family:var(--cond);font-size:1.05rem;font-weight:600;white-space:nowrap;color:var(--ink2)}
+.wu-item.done .check{background:var(--mat);border-color:var(--mat)}
+.wu-item.done .check svg{opacity:1;stroke:#fff}
+.wu-item.done .nm{color:var(--ink2)}
+.wu .tip{font-size:.85rem;color:var(--ink2);margin-top:6px;font-style:italic}
+
 #toast{position:fixed;left:50%;top:calc(12px + var(--safe-t));transform:translateX(-50%) translateY(-250%);background:var(--ink);color:var(--paper);padding:10px 16px;border-radius:999px;font-size:.92rem;font-weight:500;z-index:40;transition:transform .2s ease;white-space:nowrap}
 #toast button{background:none;border:0;color:#fff;font-weight:700;text-decoration:underline;margin-left:12px;padding:0}
 #toast.show{transform:translateX(-50%) translateY(0)}
